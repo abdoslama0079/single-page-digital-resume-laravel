@@ -1,0 +1,103 @@
+pipeline {
+    agent any
+
+    environment {
+        // Infrastructure Details
+        ACR_NAME        = 'youracrname'
+        ACR_URL         = "${ACR_NAME}.azurecr.io"
+        IMAGE_NAME      = 'laravel-resume'
+        RESOURCE_GROUP  = 'nodejs-aks-project'
+        CLUSTER_NAME    = 'nodejs_aks_cluster'
+
+        // Credentials (IDs from your Jenkins Credential Store)
+        AZURE_SP_ID     = 'ARM_CLIENT_ID'
+        AZURE_SP_SECRET = 'ARM_CLIENT_SECRET'
+        AZURE_TENANT    = 'ARM_TENANT_ID'
+
+        // Laravel specific
+        APP_ENV         = 'production'
+    }
+
+    stages {
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Checkout & Versioning') {
+            steps {
+                checkout scm
+                script {
+                    // Create a unique tag using Build Number and Git Hash
+                    env.APP_TAG = "v${BUILD_NUMBER}-${sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()}"
+                }
+            }
+        }
+
+        stage('Laravel Quality Check') {
+            agent {
+                docker { image 'php:8.2-cli-alpine' }
+            }
+            steps {
+                // Check for syntax errors before building the image
+                sh "find . -name '*.php' -exec php -l {} \\;"
+            }
+        }
+
+        stage('Docker Build & Scan') {
+            steps {
+                script {
+                    // Build the production image
+                    sh "docker build -t ${ACR_URL}/${IMAGE_NAME}:${APP_TAG} ."
+                    sh "docker tag ${ACR_URL}/${IMAGE_NAME}:${APP_TAG} ${ACR_URL}/${IMAGE_NAME}:latest"
+                }
+            }
+        }
+
+        stage('Push to Azure Registry') {
+            steps {
+                withCredentials([
+                    string(credentialsId: "${AZURE_SP_ID}", variable: 'CLIENT_ID'),
+                    string(credentialsId: "${AZURE_SP_SECRET}", variable: 'CLIENT_SECRET'),
+                    string(credentialsId: "${AZURE_TENANT}", variable: 'TENANT_ID')
+                ]) {
+                    sh "az login --service-principal -u ${CLIENT_ID} -p ${CLIENT_SECRET} --tenant ${TENANT_ID}"
+                    sh "az acr login --name ${ACR_NAME}"
+                    sh "docker push ${ACR_URL}/${IMAGE_NAME}:${APP_TAG}"
+                    sh "docker push ${ACR_URL}/${IMAGE_NAME}:latest"
+                }
+            }
+        }
+
+        stage('Deploy to AKS (Rolling Update)') {
+            steps {
+                withCredentials([
+                    string(credentialsId: "${AZURE_SP_ID}", variable: 'CLIENT_ID'),
+                    string(credentialsId: "${AZURE_SP_SECRET}", variable: 'CLIENT_SECRET'),
+                    string(credentialsId: "${AZURE_TENANT}", variable: 'TENANT_ID')
+                ]) {
+                    sh "az aks get-credentials --resource-group ${RESOURCE_GROUP} --name ${CLUSTER_NAME} --overwrite-existing"
+
+                    // Deploy using the specific version tag for traceability
+                    sh "kubectl set image deployment/resume-app resume-container=${ACR_URL}/${IMAGE_NAME}:${APP_TAG}"
+
+                    // Verify the rollout
+                    sh "kubectl rollout status deployment/resume-app"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh "docker logout ${ACR_URL}"
+        }
+        success {
+            echo "Successfully deployed version ${APP_TAG} to AKS!"
+        }
+        failure {
+            echo "Deployment failed. Check logs for details."
+        }
+    }
+}
