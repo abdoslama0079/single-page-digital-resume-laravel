@@ -77,13 +77,17 @@ pipeline {
                     string(credentialsId: "${AZURE_SP_SECRET}", variable: 'CLIENT_SECRET'),
                     string(credentialsId: "${AZURE_TENANT}", variable: 'TENANT_ID')
                 ]) {
-                    sh "az aks get-credentials --resource-group ${RESOURCE_GROUP} --name ${CLUSTER_NAME} --overwrite-existing"
+                   sh "az login --service-principal -u ${CLIENT_ID} -p ${CLIENT_SECRET} --tenant ${TENANT_ID}"
+            sh "az aks get-credentials --resource-group ${RESOURCE_GROUP} --name ${CLUSTER_NAME} --overwrite-existing"
 
-                    // Deploy using the specific version tag for traceability
-                    sh "kubectl set image deployment/resume-app resume-container=${ACR_URL}/${IMAGE_NAME}:${APP_TAG}"
+            // 1. Update the image tag inside your YAML file
+            sh "sed -i 's|ACR_IMAGE_PLACEHOLDER|${ACR_URL}/${IMAGE_NAME}:${APP_TAG}|g' k8s/deployment.yaml"
 
-                    // Verify the rollout
-                    sh "kubectl rollout status deployment/resume-app"
+            // 2. Apply the updated YAML
+            sh "kubectl apply -f k8s/deployment.yaml"
+
+            // 3. Verify the rollout
+            sh "kubectl rollout status deployment/resume-app"
                 }
             }
         }
