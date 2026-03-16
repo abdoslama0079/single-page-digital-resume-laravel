@@ -85,17 +85,25 @@ pipeline {
 
             // 3. Verify the rollout
             sh "kubectl rollout status deployment/resume-app"
-
-                    // --- ADD THIS TO GET THE IP ---
-                    script {
-                        echo "Waiting for External IP..."
-                        // This loop waits until the IP is assigned
-                        sh "sleep 20" 
+                script {
+                    echo "Waiting for Azure to assign an External IP..."
+                    def iterations = 0
+                    while (iterations < 10) {
                         env.SERVICE_IP = sh(
                             script: "kubectl get svc resume-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'",
                             returnStdout: true
                         ).trim()
+                        
+                        if (env.SERVICE_IP) {
+                            echo "IP Assigned: ${env.SERVICE_IP}"
+                            break
+                        } else {
+                            echo "Still waiting... (Attempt ${iterations + 1}/10)"
+                            sh "sleep 15"
+                            iterations++
+                        }
                     }
+                }
                 }
             }
         }
