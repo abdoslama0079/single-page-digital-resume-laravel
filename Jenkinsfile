@@ -82,7 +82,7 @@ pipeline {
 
             // 2. Apply the updated YAML
             sh "kubectl apply -f k8s/deployment.yaml"
-
+            sh "kubectl apply -f k8s/service.yaml"
             // 3. Verify the rollout
             sh "kubectl rollout status deployment/resume-app"
                 script {
