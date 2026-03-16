@@ -85,6 +85,17 @@ pipeline {
 
             // 3. Verify the rollout
             sh "kubectl rollout status deployment/resume-app"
+
+                    // --- ADD THIS TO GET THE IP ---
+                    script {
+                        echo "Waiting for External IP..."
+                        // This loop waits until the IP is assigned
+                        sh "sleep 20" 
+                        env.SERVICE_IP = sh(
+                            script: "kubectl get svc resume-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'",
+                            returnStdout: true
+                        ).trim()
+                    }
                 }
             }
         }
