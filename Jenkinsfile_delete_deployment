@@ -1,0 +1,46 @@
+pipeline {
+    agent any
+    environment {
+        AZURE_SP_ID     = 'ARM_CLIENT_ID'
+        AZURE_SP_SECRET = 'ARM_CLIENT_SECRET'
+        AZURE_TENANT    = 'ARM_TENANT_ID'
+        RESOURCE_GROUP  = 'nodejs-aks-project'
+        CLUSTER_NAME    = 'nodejs_aks_cluster'
+    }
+    stages {
+        stage('Initialize') {
+            steps {
+                cleanWs()
+                checkout scm // Vital so Jenkins can see your k8s/ files
+            }
+        }
+        stage('Connect & Cleanup K8s') {
+            steps {
+                withCredentials([
+                    string(credentialsId: "${AZURE_SP_ID}", variable: 'CLIENT_ID'),
+                    string(credentialsId: "${AZURE_SP_SECRET}", variable: 'CLIENT_SECRET'),
+                    string(credentialsId: "${AZURE_TENANT}", variable: 'TENANT_ID')
+                ]) {
+                    sh "az login --service-principal -u ${CLIENT_ID} -p ${CLIENT_SECRET} --tenant ${TENANT_ID}"
+                    sh "az aks get-credentials --resource-group ${RESOURCE_GROUP} --name ${CLUSTER_NAME} --overwrite-existing"
+
+                    // Clean up the LoadBalancer and Deployment
+                    sh "kubectl delete -f k8s/ --ignore-not-found=true"
+
+                    echo "Waiting 30 seconds for Azure to release the Public IP..."
+                    sh "sleep 30"
+                }
+            }
+        }
+    }
+    post {
+        success {
+            echo "Cleanup successful. Triggering Infrastructure Destroy..."
+            // This triggers your Terraform destroy job
+            build job: 'destroy_CI', wait: false
+        }
+        failure {
+            echo "Cleanup failed. Check if the cluster is reachable or if the k8s files exist."
+        }
+    }
+}
