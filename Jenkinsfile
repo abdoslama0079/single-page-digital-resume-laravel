@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         // Infrastructure Details
-        ACR_NAME        = 'youracrname'
+        ACR_NAME        = 'nodejsproject884215'
         ACR_URL         = "${ACR_NAME}.azurecr.io"
         IMAGE_NAME      = 'laravel-resume'
         RESOURCE_GROUP  = 'nodejs-aks-project'
