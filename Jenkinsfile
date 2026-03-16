@@ -112,6 +112,8 @@ pipeline {
     post {
         always {
             sh "docker logout ${ACR_URL}"
+            // Remove the local images we just built to save space
+           // sh "docker rmi ${ACR_URL}/${IMAGE_NAME}:${APP_TAG} ${ACR_URL}/${IMAGE_NAME}:latest || true"
         }
         success {
             echo "Successfully deployed version ${APP_TAG} to AKS!"
