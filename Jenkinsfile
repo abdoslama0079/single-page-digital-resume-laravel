@@ -36,9 +36,6 @@ pipeline {
         }
 
         stage('Laravel Quality Check') {
-            agent {
-                docker { image 'php:8.2-cli-alpine' }
-            }
             steps {
                 // Check for syntax errors before building the image
                 sh "find . -name '*.php' -exec php -l {} \\;"
