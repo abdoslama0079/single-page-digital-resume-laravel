@@ -1,0 +1,60 @@
+pipeline {
+    agent any
+    environment {
+        ARM_CLIENT_ID       = credentials('ARM_CLIENT_ID')
+        ARM_CLIENT_SECRET   = credentials('ARM_CLIENT_SECRET')
+        ARM_SUBSCRIPTION_ID = credentials('ARM_SUBSCRIPTION_ID')
+        ARM_TENANT_ID       = credentials('ARM_TENANT_ID')
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                echo 'Cloning repository...'
+                git branch: 'main', url: 'https://github.com/abdoslama0079/aks_node_js_app.git'
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                echo 'Initializing Terraform...'
+                sh 'terraform init'
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                echo 'Validating Terraform configuration...'
+                sh 'terraform validate'
+            }
+        }
+
+        stage('Confirm Destroy') {
+            steps {
+                // Manual approval to avoid accidental destruction
+                input message: "Are you sure you want to DESTROY all Azure resources?", ok: "Yes, destroy"
+            }
+        }
+
+        stage('Terraform Destroy') {
+            steps {
+                echo 'Destroying Terraform-managed infrastructure...'
+                sh 'terraform destroy -input=false -auto-approve'
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Cleaning workspace...'
+            cleanWs()
+        }
+        success {
+            echo '✅ Infrastructure destroyed successfully!'
+        }
+        failure {
+            echo '❌ Terraform destroy failed. Check logs!'
+        }
+    }
+}
